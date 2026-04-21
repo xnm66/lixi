@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+	<title>存款管理</title>
+	<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+	<style>
+		*{margin:0;padding:0;box-sizing:border-box}
+		body{
+			background:linear-gradient(to right,#e8e8e8 0.5px,transparent 0.5px),linear-gradient(to bottom,#e8e8e8 0.5px,transparent 0.5px);
+			background-size:16px 16px;
+			background-color:#f8f8f8;
+			font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+			min-height:100vh;
+			display:flex;
+			flex-direction:column;
+			padding:24px 16px 0;
+			color:#333;
+		}
+		.container{
+			max-width:560px;
+			width:100%;
+			margin:0 auto;
+			flex:1;
+		}
+		.header{margin-bottom:20px;text-align:center}
+		.header h1{font-size:1.7rem;font-weight:600;color:#5a5a5a;letter-spacing:-0.3px}
+		.sub{font-size:0.7rem;color:#aaa;margin-top:6px}
+		button,input,select,textarea,div,span{outline:none;-webkit-tap-highlight-color:transparent!important;-webkit-appearance:none}
+
+		/* 余额宝卡片 */
+		.yuebao-card{
+			background:#fff;border-radius:22px;padding:18px;border:1px solid #e8e8e8;
+			box-shadow:0 6px 14px rgba(0,0,0,0.08);margin-bottom:24px;
+		}
+		.yuebao-header{
+			display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;
+			padding-bottom:10px;border-bottom:1px solid #f0f0f0;
+		}
+		.yuebao-title{font-size:1rem;font-weight:600;color:#e68a2e}
+		.yuebao-edit{background:#f0f0f0;border:none;border-radius:14px;padding:4px 12px;font-size:0.6rem;cursor:pointer;color:#666}
+		.yuebao-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px}
+		.yuebao-stats2{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+		.yuebao-item{text-align:center}
+		.yuebao-label{font-size:0.55rem;color:#aaa;margin-bottom:3px}
+		.yuebao-number{font-size:0.9rem;font-weight:700;color:#e68a2e}
+		.time-control{display:flex;align-items:center;justify-content:space-between;margin:8px 0 4px}
+		.time-btn{background:#f0f0f0;border:none;border-radius:12px;padding:3px 12px;font-size:0.65rem;cursor:pointer;color:#888}
+		.chart-range{font-size:0.6rem;color:#aaa}
+		.tiny-chart{height:100px;width:100%;margin-top:4px}
+		.tiny-chart canvas{cursor:pointer;-webkit-tap-highlight-color:transparent}
+		.yuebao-tip{
+			background:#fef5e8;border-radius:12px;padding:8px 12px;font-size:0.55rem;
+			color:#b89a6a;margin-top:12px;line-height:1.5;
+		}
+
+		/* 银行卡片 */
+		.bank-card{
+			background:#fff;border-radius:22px;padding:18px;border:1px solid #e8e8e8;
+			box-shadow:0 6px 14px rgba(0,0,0,0.08);margin-bottom:20px;
+		}
+		.bank-header{
+			display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;
+			padding-bottom:10px;border-bottom:1px solid #f0f0f0;
+		}
+		.bank-title{font-size:1rem;font-weight:600;color:#6b8c5c}
+		.bank-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px}
+		.bank-stats2{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+		.bank-item{text-align:center}
+		.bank-label{font-size:0.55rem;color:#aaa;margin-bottom:3px}
+		.bank-number{font-size:0.9rem;font-weight:700;color:#6b8c5c}
+		.bank-number.clickable{cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px}
+		.bank-tip{
+			background:#eff5ea;border-radius:12px;padding:8px 12px;font-size:0.55rem;
+			color:#6b8c5c;margin-top:12px;line-height:1.5;
+		}
+
+		/* 添加存款按钮 */
+		.add-deposit-btn{
+			width:100%;background:#6b8c5c;color:#fff;border:none;border-radius:40px;
+			padding:12px 0;font-size:0.9rem;font-weight:500;cursor:pointer;margin:8px 0 20px;
+			box-shadow:0 2px 6px rgba(0,0,0,0.05);
+		}
+
+		/* 存款列表 */
+		.list-header{margin-bottom:16px;padding:0 4px}
+		.list-title{font-size:0.85rem;font-weight:600;color:#888}
+		.card-list{display:flex;flex-direction:column;gap:14px}
+		.card{
+			background:#fff;border-radius:22px;padding:18px;border:1px solid #e8e8e8;
+			box-shadow:0 6px 14px rgba(0,0,0,0.08);position:relative;overflow:hidden;
+		}
+		.corner-tag{
+			position:absolute;top:15px;right:-45px;transform:rotate(45deg);font-size:0.85rem;
+			font-weight:800;width:130px;text-align:center;letter-spacing:2px;opacity:0.4;pointer-events:none;
+		}
+		.tag-active{color:#2c6e3c}
+		.tag-warning{color:#e68a2e}
+		.tag-expired{color:#b0b0b0}
+		.card-actions{position:absolute;top:8px;right:45px;display:flex;gap:6px}
+		.edit-btn,.delete-btn{
+			background:#f0f0f0;border:none;border-radius:14px;padding:3px 8px;
+			font-size:0.6rem;cursor:pointer;color:#666;
+		}
+		.bank-name{font-size:1rem;font-weight:600;color:#5a5a5a;margin-bottom:14px}
+		.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px}
+		.info-line{display:flex;justify-content:space-between;font-size:0.75rem}
+		.info-label{color:#bbb}
+		.money-value{font-weight:650;color:#2a7a3e}
+		.interest-value{font-weight:600;color:#c46b1a}
+		.countdown-area{
+			background:#efefef;border-radius:16px;padding:8px 12px;text-align:center;
+			font-size:0.7rem;margin-top:12px;color:#999;
+		}
+		.countdown-number{font-weight:700;font-size:0.85rem;color:#6b8c5c}
+		.empty-state{
+			text-align:center;padding:48px 20px;color:#ccc;background:#fff;
+			border-radius:24px;border:1px dashed #e0e0e0;
+		}
+
+		/* 页脚 - 自动贴底 */
+		.footer{
+			margin-top:auto;
+			padding:12px 0 8px;
+			display:flex;
+			align-items:center;
+			justify-content:space-between;
+		}
+		.footer-text{
+			font-size:0.5rem;
+			color:#aaa;
+		}
+		.footer-buttons{
+			display:flex;
+			gap:8px;
+		}
+		.footer-btn{
+			background:#f0f0f0;
+			border:none;
+			border-radius:16px;
+			padding:4px 10px;
+			font-size:0.55rem;
+			color:#888;
+			cursor:pointer;
+		}
+
+		/* 提示框 */
+		.chart-tooltip{
+			position:fixed;background:rgba(0,0,0,0.85);color:#fff;padding:6px 10px;
+			border-radius:8px;font-size:0.7rem;z-index:1000;display:none;white-space:nowrap;
+			box-shadow:0 2px 8px rgba(0,0,0,0.3);cursor:pointer;pointer-events:auto;
+			text-align:center;line-height:1.4;
+		}
+		.chart-tooltip .hint-text{font-size:0.55rem;opacity:0.75}
+
+		/* 弹窗 */
+		.modal{
+			display:none;position:fixed;top:0;left:0;width:100%;height:100%;
+			background:rgba(0,0,0,0.4);justify-content:center;align-items:center;z-index:1000;
+		}
+		.modal-content{background:#fff;border-radius:28px;padding:24px;width:320px;max-width:90%}
+		.modal-content h3{color:#5a5a5a;margin-bottom:20px;font-size:1.2rem}
+		.modal-content input,.modal-content select{
+			width:100%;padding:12px;margin-bottom:12px;border:1px solid #e0e0e0;
+			border-radius:16px;font-size:0.85rem;
+		}
+		.modal-buttons{display:flex;gap:12px;margin-top:8px}
+		.modal-buttons button{
+			flex:1;padding:12px;border:none;border-radius:40px;font-weight:500;cursor:pointer;
+		}
+		.save-btn{background:#6b8c5c;color:#fff}
+		.cancel-btn{background:#e0e0e0;color:#666}
+	</style>
+</head>
+<body>
+<div class="container">
+	<div class="header">
+		<h1>💰 存款管理</h1>
+		<div class="sub">定期存单 + 活期理财 · 利息一目了然</div>
+	</div>
+
+	<!-- 余额宝卡片 -->
+	<div class="yuebao-card">
+		<div class="yuebao-header">
+			<span class="yuebao-title">💰 余额宝 · 活期收益</span>
+			<button class="yuebao-edit" id="editYuebaoBtn">✏️ 编辑</button>
+		</div>
+		<div class="yuebao-stats">
+			<div class="yuebao-item"><div class="yuebao-label">本金</div><div class="yuebao-number" id="ybPrincipal">¥0</div></div>
+			<div class="yuebao-item"><div class="yuebao-label">7日年化</div><div class="yuebao-number" id="ybRate">0%</div></div>
+			<div class="yuebao-item"><div class="yuebao-label">每日利息</div><div class="yuebao-number" id="ybDaily">¥0</div></div>
+		</div>
+		<div class="yuebao-stats2">
+			<div class="yuebao-item"><div class="yuebao-label">每月利息</div><div class="yuebao-number" id="ybMonthly">¥0</div></div>
+			<div class="yuebao-item"><div class="yuebao-label">今年总利息</div><div class="yuebao-number" id="ybYearly">¥0</div></div>
+			<div class="yuebao-item"><div class="yuebao-label">累计利息</div><div class="yuebao-number" id="ybTotal">¥0</div></div>
+		</div>
+		<div class="time-control">
+			<button class="time-btn" id="ybPrevMonth">◀ 上月</button>
+			<span class="chart-range" id="ybRangeLabel"></span>
+			<button class="time-btn" id="ybNextMonth">下月 ▶</button>
+		</div>
+		<div class="tiny-chart"><canvas id="yuebaoChart"></canvas></div>
+		<div class="yuebao-tip">
+			📌 建议每月：支付宝 → 余额宝 → 查看<strong>"七日年化"</strong> 📝 填写到上方。<br>
+			⚠️ 若利率持续低于<strong>0.8%</strong>建议更换<strong>同业存单基金</strong>。<br>
+			⏰ 最佳更换时间：<strong>周一至周四15:00前</strong>（仅损失1天）否则最高损失<strong>4天</strong>。
+		</div>
+	</div>
+
+	<!-- 银行卡片 -->
+	<div class="bank-card">
+		<div class="bank-header">
+			<span class="bank-title">🏦 银行定期 · 总览</span>
+			<span style="font-size:0.6rem;color:#aaa;">10年利息回顾</span>
+		</div>
+		<div class="bank-stats">
+			<div class="bank-item"><div class="bank-label">存款本金</div><div class="bank-number" id="bankPrincipal">¥0</div></div>
+			<div class="bank-item"><div class="bank-label">累计利息</div><div class="bank-number" id="bankTotalInterest">¥0</div></div>
+			<div class="bank-item"><div class="bank-label">今年总利息</div><div class="bank-number" id="bankYearInterest">¥0</div></div>
+		</div>
+		<div class="bank-stats2">
+			<div class="bank-item"><div class="bank-label">总笔数</div><div class="bank-number" id="bankTotalCount">0</div></div>
+			<div class="bank-item"><div class="bank-label">未到期</div><div class="bank-number clickable" id="bankActiveCount">0</div></div>
+			<div class="bank-item"><div class="bank-label">已到期</div><div class="bank-number clickable" id="bankExpiredCount">0</div></div>
+		</div>
+		<div class="time-control">
+			<button class="time-btn" id="bankPrevYear">◀ 上年</button>
+			<span class="chart-range" id="bankRangeLabel"></span>
+			<button class="time-btn" id="bankNextYear">下年 ▶</button>
+		</div>
+		<div class="tiny-chart"><canvas id="bankChart"></canvas></div>
+		<div class="bank-tip">
+			📌 定期存款到期前30天会预警提醒，建议及时关注。<br>
+			💡 点击上方「未到期」或「已到期」数字可快速跳转查看对应存单。<br>
+			⚠️ 到期后及时转存，避免活期利率损失收益。
+		</div>
+	</div>
+
+	<!-- 添加存款按钮 -->
+	<button class="add-deposit-btn" id="openAddBtn">+ 添加存款</button>
+
+	<!-- 存款列表 -->
+	<div class="list-header"><div class="list-title" id="listTitle">📋 进行中的存款</div></div>
+	<div class="card-list" id="cardContainer"></div>
+
+	<!-- 页脚 - 自动贴底 -->
+	<div class="footer">
+		<span class="footer-text">💾 数据仅保存在手机本地，不上传不泄露</span>
+		<div class="footer-buttons">
+			<button class="footer-btn" id="backupBtn">📁 备份</button>
+			<button class="footer-btn" id="restoreBtn">🔄 恢复</button>
+		</div>
+	</div>
+</div>
+
+<!-- 提示框 -->
+<div id="chartTooltip" class="chart-tooltip"></div>
+
+<!-- 存款弹窗 -->
+<div class="modal" id="modal">
+	<div class="modal-content">
+		<h3 id="modalTitle">添加存款</h3>
+		<input type="text" id="bankName" placeholder="银行名称" value="农业银行">
+		<input type="number" id="amount" placeholder="金额 (元)" value="10000">
+		<select id="termYears"><option value="1">1年</option><option value="2">2年</option><option value="3" selected>3年</option><option value="5">5年</option></select>
+		<input type="text" id="rate" placeholder="年利率 (%)" value="1.60">
+		<input type="date" id="startDate">
+		<div class="modal-buttons"><button class="save-btn" id="saveBtn">保存</button><button class="cancel-btn" id="cancelBtn">取消</button></div>
+	</div>
+</div>
+
+<!-- 余额宝弹窗 -->
+<div class="modal" id="yuebaoModal">
+	<div class="modal-content">
+		<h3>编辑余额宝</h3>
+		<input type="number" id="yuebaoAmountInput" placeholder="余额宝金额 (元)" value="0">
+		<input type="text" id="yuebaoRateInput" placeholder="7日年化率 (%)" value="0">
+		<div style="font-size:0.6rem;color:#aaa;margin-bottom:12px;">📌 设置后自动更新当前月份收益</div>
+		<div class="modal-buttons"><button class="save-btn" id="saveYuebaoBtn">保存</button><button class="cancel-btn" id="cancelYuebaoBtn">取消</button></div>
+	</div>
+</div>
+
+<!-- 编辑收益弹窗 -->
+<div class="modal" id="editValueModal">
+	<div class="modal-content">
+		<h3 id="editValueTitle">修改收益</h3>
+		<input type="number" id="editValueInput" placeholder="输入金额" step="0.01">
+		<div style="font-size:0.55rem;color:#aaa;margin:4px 0 12px;" id="editValueHint"></div>
+		<div class="modal-buttons"><button class="save-btn" id="saveEditValueBtn">保存</button><button class="cancel-btn" id="cancelEditValueBtn">取消</button></div>
+	</div>
+</div>
+
+<script>
+(function(){
+	"use strict";
+
+	// ========== 数据 ==========
+	let deposits = [];
+	let yuebao = { amount: 0, rate7d: 0 };
+	let yuebaoManualData = {};
+	let yuebaoManualFlags = {};
+	let bankManualData = {};
+	let bankManualFlags = {};
+	let nextId = 1;
+	let currentView = "active";
+	let editingId = null;
+
+	let ybBaseMonth = new Date();
+	ybBaseMonth = new Date(ybBaseMonth.getFullYear(), ybBaseMonth.getMonth(), 1);
+	let bankBaseYear = new Date().getFullYear() - 9;
+
+	let currentEditData = null;
+	let ybChart = null, bankChart = null;
+	let tooltipTimeout = null;
+
+	const YUEBAO_MAX = 300;
+	const BANK_MAX = 10000;
+	const YB_COLOR = '#e68a2e';
+	const BANK_COLOR = '#6b8c5c';
+
+	// ========== 存储 ==========
+	function saveToLocal() {
+		localStorage.setItem('depositAllData', JSON.stringify({ deposits, yuebao, nextId }));
+		localStorage.setItem('yuebaoManualData', JSON.stringify(yuebaoManualData));
+		localStorage.setItem('yuebaoManualFlags', JSON.stringify(yuebaoManualFlags));
+		localStorage.setItem('bankManualData', JSON.stringify(bankManualData));
+		localStorage.setItem('bankManualFlags', JSON.stringify(bankManualFlags));
+	}
+
+	function loadFromLocal() {
+		const saved = localStorage.getItem('depositAllData');
+		if (saved) {
+			try {
+				const data = JSON.parse(saved);
+				deposits = data.deposits || [];
+				yuebao = data.yuebao || { amount: 0, rate7d: 0 };
+				nextId = data.nextId || 1;
+			} catch(e) {}
+		}
+		yuebaoManualData = JSON.parse(localStorage.getItem('yuebaoManualData')) || {};
+		yuebaoManualFlags = JSON.parse(localStorage.getItem('yuebaoManualFlags')) || {};
+		bankManualData = JSON.parse(localStorage.getItem('bankManualData')) || {};
+		bankManualFlags = JSON.parse(localStorage.getItem('bankManualFlags')) || {};
+	}
+
+	// ========== 工具函数 ==========
+	function addYears(dateStr, years) {
+		let d = new Date(dateStr);
+		d.setFullYear(d.getFullYear() + years);
+		return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+	}
+	function calcInterest(amount, rate, years) { return amount * (rate / 100) * years; }
+	function getDaysLeft(endDateStr) {
+		const today = new Date(); today.setHours(0,0,0,0);
+		const end = new Date(endDateStr); end.setHours(0,0,0,0);
+		return Math.ceil((end - today) / (1000*60*60*24));
+	}
+	function formatMoney(v) { return '¥' + Math.round(v).toLocaleString(); }
+	function enrich() {
+		return deposits.map(d => {
+			const end = addYears(d.startDate, d.termYears);
+			const days = getDaysLeft(end);
+			const expired = days < 0;
+			const interest = calcInterest(d.amount, d.rate, d.termYears);
+			return { ...d, endDate: end, daysLeft: days, expired, interest };
+		});
+	}
+
+	// ========== 余额宝数据 ==========
+	function getYuebaoLabels() {
+		const labels = [];
+		for (let i = 11; i >= 0; i--) {
+			const d = new Date(ybBaseMonth);
+			d.setMonth(d.getMonth() - i);
+			labels.push(`${d.getFullYear()}年${d.getMonth()+1}月`);
+		}
+		return labels;
+	}
+	function getShortLabels() { return getYuebaoLabels().map(l => l.split('年')[1]); }
+	function getCurrentMonthLabel() {
+		const d = new Date();
+		return `${d.getFullYear()}年${d.getMonth()+1}月`;
+	}
+	function getYuebaoData() {
+		const labels = getYuebaoLabels();
+		return labels.map(label => yuebaoManualData[label] !== undefined ? yuebaoManualData[label] : 0);
+	}
+	function getYuebaoYearlyTotal() {
+		const currentYear = new Date().getFullYear();
+		let total = 0;
+		for (let month = 1; month <= 12; month++) {
+			const label = `${currentYear}年${month}月`;
+			total += yuebaoManualData[label] || 0;
+		}
+		return total;
+	}
+
+	// ========== 银行数据 ==========
+	function getBankLabels() {
+		const labels = [];
+		for (let i = 0; i < 10; i++) labels.push(`${bankBaseYear + i}年`);
+		return labels;
+	}
+	function getBankYearlyInterest() {
+		const enriched = enrich();
+		const labels = getBankLabels();
+		const yearlyInterest = Array(10).fill(0);
+		enriched.forEach(d => {
+			const endYear = new Date(d.endDate).getFullYear();
+			const index = labels.findIndex(l => l === `${endYear}年`);
+			if (index >= 0 && index < 10) yearlyInterest[index] += d.interest;
+		});
+		return labels.map((label, i) => {
+			if (bankManualFlags[label]) return bankManualData[label] || 0;
+			return yearlyInterest[i];
+		});
+	}
+	function getCurrentYearInterest() {
+		const currentYear = new Date().getFullYear();
+		return enrich().filter(d => new Date(d.endDate).getFullYear() === currentYear).reduce((s,d) => s + d.interest, 0);
+	}
+
+	// ========== 更新UI ==========
+	function updateAllStats() {
+		const enriched = enrich();
+		const active = enriched.filter(d => !d.expired);
+		const expired = enriched.filter(d => d.expired);
+		const activePrincipal = active.reduce((s,d) => s + d.amount, 0);
+		const totalInterest = enriched.reduce((s,d) => s + d.interest, 0);
+		const yearInterest = getCurrentYearInterest();
+		
+		document.getElementById('bankPrincipal').innerText = formatMoney(activePrincipal);
+		document.getElementById('bankTotalInterest').innerText = formatMoney(totalInterest);
+		document.getElementById('bankYearInterest').innerText = formatMoney(yearInterest);
+		document.getElementById('bankTotalCount').innerText = enriched.length;
+		document.getElementById('bankActiveCount').innerText = active.length;
+		document.getElementById('bankExpiredCount').innerText = expired.length;
+		
+		const daily = yuebao.amount * (yuebao.rate7d/100) / 365;
+		const monthly = yuebao.amount * (yuebao.rate7d/100) / 12;
+		document.getElementById('ybPrincipal').innerText = formatMoney(yuebao.amount);
+		document.getElementById('ybRate').innerText = yuebao.rate7d.toFixed(2) + '%';
+		document.getElementById('ybDaily').innerText = '¥' + (daily || 0).toFixed(2);
+		document.getElementById('ybMonthly').innerText = '¥' + (monthly || 0).toFixed(2);
+		document.getElementById('ybYearly').innerText = formatMoney(getYuebaoYearlyTotal());
+		document.getElementById('ybTotal').innerText = formatMoney(Object.values(yuebaoManualData).reduce((s, v) => s + v, 0));
+
+		const ybLabels = getYuebaoLabels();
+		document.getElementById('ybRangeLabel').innerText = `${ybLabels[0]} - ${ybLabels[11]}`;
+		document.getElementById('bankRangeLabel').innerText = `${getBankLabels()[0]} - ${getBankLabels()[9]}`;
+	}
+
+	// ========== 渲染曲线 ==========
+	function renderYuebaoChart() {
+		const labels = getYuebaoLabels();
+		const shortLabels = getShortLabels();
+		const data = getYuebaoData();
+		const ctx = document.getElementById('yuebaoChart').getContext('2d');
+		if (ybChart) ybChart.destroy();
+		ybChart = new Chart(ctx, {
+			type: 'line',
+			data: {
+				labels: shortLabels,
+				datasets: [{
+					data: data,
+					borderColor: YB_COLOR,
+					borderWidth: 2,
+					pointBackgroundColor: YB_COLOR,
+					pointBorderColor: '#fff',
+					pointBorderWidth: 2,
+					pointRadius: (ctx) => ctx.dataIndex === 11 ? 6 : 5,
+					pointHoverRadius: 8,
+					tension: 0.2,
+					fill: false
+				}]
+			},
+			options: {
+				responsive: true, maintainAspectRatio: false,
+				plugins: { legend: { display: false }, tooltip: { enabled: false } },
+				scales: {
+					x: { grid: { display: false }, ticks: { font: { size: 8 }, color: '#aaa' } },
+					y: { 
+						display: true, grid: { color: '#f0f0f0' }, min: 0, max: YUEBAO_MAX,
+						ticks: {
+							callback: (val) => [0,50,100,150,200,250,300].includes(val) ? '¥'+val : null,
+							font: { size: 6 }, color: '#aaa', maxTicksLimit: 7, autoSkip: false
+						}
+					}
+				},
+				onHover: (e, elements) => {
+					if (elements.length) showTooltip(e, labels[elements[0].index], data[elements[0].index], 'yuebao');
+					else hideTooltip();
+				},
+				onClick: (e, elements) => {
+					if (elements.length) showTooltip(e, labels[elements[0].index], data[elements[0].index], 'yuebao');
+				}
+			}
+		});
+	}
+
+	function renderBankChart() {
+		const labels = getBankLabels();
+		const data = getBankYearlyInterest();
+		const ctx = document.getElementById('bankChart').getContext('2d');
+		if (bankChart) bankChart.destroy();
+		bankChart = new Chart(ctx, {
+			type: 'line',
+			data: {
+				labels: labels,
+				datasets: [{
+					data: data,
+					borderColor: BANK_COLOR,
+					borderWidth: 2,
+					pointBackgroundColor: BANK_COLOR,
+					pointBorderColor: '#fff',
+					pointBorderWidth: 2,
+					pointRadius: (ctx) => ctx.dataIndex === 9 ? 6 : 5,
+					pointHoverRadius: 8,
+					tension: 0.1,
+					fill: false
+				}]
+			},
+			options: {
+				responsive: true, maintainAspectRatio: false,
+				plugins: { legend: { display: false }, tooltip: { enabled: false } },
+				scales: {
+					x: { grid: { display: false }, ticks: { font: { size: 7 }, color: '#aaa', maxRotation: 0 } },
+					y: { display: true, grid: { color: '#f0f0f0' }, min: 0, max: BANK_MAX,
+						ticks: {
+							callback: (val) => [0,2000,4000,6000,8000,10000].includes(val) ? (val>=1000?'¥'+(val/1000)+'K':'¥'+val) : null,
+							font: { size: 7 }, color: '#aaa', maxTicksLimit: 6, autoSkip: false
+						}
+					}
+				},
+				onHover: (e, elements) => {
+					if (elements.length) showTooltip(e, labels[elements[0].index], data[elements[0].index], 'bank');
+					else hideTooltip();
+				},
+				onClick: (e, elements) => {
+					if (elements.length) showTooltip(e, labels[elements[0].index], data[elements[0].index], 'bank');
+				}
+			}
+		});
+	}
+
+	// ========== 提示框 ==========
+	function showTooltip(event, label, value, type) {
+		const tooltip = document.getElementById('chartTooltip');
+		const canvas = event.chart.canvas;
+		const rect = canvas.getBoundingClientRect();
+		const chart = event.chart;
+		const elements = chart.getElementsAtEventForMode(event.native, 'nearest', { intersect: true }, true);
+		if (!elements.length) return;
+		const idx = elements[0].index;
+		const labels = type === 'yuebao' ? getYuebaoLabels() : getBankLabels();
+		const x = rect.left + (rect.width / labels.length) * (idx + 0.5);
+		const y = rect.top - 35;
+		if (tooltipTimeout) clearTimeout(tooltipTimeout);
+		currentEditData = { type, label, value };
+		tooltip.style.display = 'block';
+		tooltip.style.left = x + 'px';
+		tooltip.style.top = y + 'px';
+		tooltip.style.transform = 'translateX(-50%)';
+		tooltip.innerHTML = `${label} 💰 ${type === 'yuebao' ? '¥' + value.toFixed(2) : formatMoney(value)}<br><div class="hint-text">👆 点击修改</div>`;
+		tooltipTimeout = setTimeout(() => tooltip.style.display = 'none', 3000);
+	}
+	function hideTooltip() {
+		if (tooltipTimeout) clearTimeout(tooltipTimeout);
+		document.getElementById('chartTooltip').style.display = 'none';
+	}
+
+	// ========== 编辑收益 ==========
+	function showEditModal() {
+		if (!currentEditData) return;
+		const { type, label, value } = currentEditData;
+		const maxVal = type === 'yuebao' ? YUEBAO_MAX : BANK_MAX;
+		document.getElementById('editValueTitle').innerText = type === 'yuebao' ? `${label} 余额宝收益` : `${label} 银行利息`;
+		document.getElementById('editValueInput').value = value.toFixed(2);
+		document.getElementById('editValueInput').max = maxVal;
+		document.getElementById('editValueHint').innerText = `最大不能超过 ${type === 'yuebao' ? '¥'+maxVal : formatMoney(maxVal)}`;
+		document.getElementById('editValueModal').style.display = 'flex';
+		hideTooltip();
+	}
+	function saveEditValue() {
+		const newValue = parseFloat(document.getElementById('editValueInput').value);
+		const maxVal = currentEditData.type === 'yuebao' ? YUEBAO_MAX : BANK_MAX;
+		if (isNaN(newValue) || newValue < 0) { alert('请输入有效金额'); return; }
+		if (newValue > maxVal) { alert(`金额不能超过 ${currentEditData.type === 'yuebao' ? '¥'+maxVal : formatMoney(maxVal)}`); return; }
+		if (currentEditData.type === 'yuebao') {
+			yuebaoManualData[currentEditData.label] = newValue;
+			yuebaoManualFlags[currentEditData.label] = true;
+		} else {
+			bankManualData[currentEditData.label] = newValue;
+			bankManualFlags[currentEditData.label] = true;
+		}
+		saveToLocal();
+		document.getElementById('editValueModal').style.display = 'none';
+		refreshAll();
+	}
+
+	// ========== 存款列表 ==========
+	function renderDepositList() {
+		const enriched = enrich();
+		let display = currentView === 'active' ? enriched.filter(d => !d.expired) : enriched.filter(d => d.expired);
+		
+		// 排序
+		if (currentView === 'active') {
+			display.sort((a, b) => a.daysLeft - b.daysLeft);
+		} else {
+			display.sort((a, b) => new Date(b.endDate) - new Date(a.endDate));
+		}
+		
+		document.getElementById('listTitle').innerHTML = currentView === 'active' ? '📋 进行中的存款' : '✅ 已到期的存款';
+		const container = document.getElementById('cardContainer');
+		container.innerHTML = '';
+		if (!display.length) {
+			const emptyMsg = currentView === 'active' ? '💰 还没有存单，去添加一笔吧' : '💵 暂无到期存款，到期后会显示在这里';
+			container.innerHTML = `<div class="empty-state">${emptyMsg}</div>`;
+			return;
+		}
+		display.forEach(d => {
+			const tagClass = d.expired ? 'tag-expired' : (d.daysLeft <= 30 ? 'tag-warning' : 'tag-active');
+			const tagText = d.expired ? '已到期' : (d.daysLeft <= 30 ? '即将到期' : '进行中');
+			const countdownHtml = d.expired ? `📅 已于 ${d.endDate} 到期` : `⏳ <span class="countdown-number">${d.daysLeft}</span> 天后到期 · ${d.endDate}`;
+			const card = document.createElement('div');
+			card.className = 'card';
+			card.innerHTML = `
+				<div class="corner-tag ${tagClass}">${tagText}</div>
+				<div class="card-actions">
+					<button class="edit-btn" data-id="${d.id}">✏️ 编辑</button>
+					<button class="delete-btn" data-id="${d.id}">🗑️ 删除</button>
+				</div>
+				<div class="bank-name">${d.bank}</div>
+				<div class="info-grid">
+					<div class="info-line"><span class="info-label">💰 金额</span><span class="money-value">${formatMoney(d.amount)}</span></div>
+					<div class="info-line"><span class="info-label">⏱️ 存期</span><span>${d.termYears}年</span></div>
+					<div class="info-line"><span class="info-label">📈 利率</span><span>${d.rate}%</span></div>
+					<div class="info-line"><span class="info-label">🧾 利息</span><span class="interest-value">${formatMoney(d.interest)}</span></div>
+					<div class="info-line"><span class="info-label">📅 起存日</span><span>${d.startDate}</span></div>
+					<div class="info-line"><span class="info-label">🏁 到期日</span><span>${d.endDate}</span></div>
+				</div>
+				<div class="countdown-area">${countdownHtml}</div>
+			`;
+			container.appendChild(card);
+		});
+		document.querySelectorAll('.edit-btn').forEach(btn => btn.addEventListener('click', () => openEditModal(parseInt(btn.dataset.id))));
+		document.querySelectorAll('.delete-btn').forEach(btn => btn.addEventListener('click', () => {
+			if (confirm('确定删除吗？')) {
+				deposits = deposits.filter(d => d.id !== parseInt(btn.dataset.id));
+				saveToLocal();
+				refreshAll();
+			}
+		}));
+	}
+	function scrollToList() { document.getElementById('cardContainer').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+
+	// ========== 弹窗 ==========
+	function openAddModal() {
+		editingId = null;
+		document.getElementById('modalTitle').innerText = '添加存款';
+		document.getElementById('bankName').value = '农业银行';
+		document.getElementById('amount').value = '';
+		document.getElementById('termYears').value = '3';
+		document.getElementById('rate').value = '';
+		document.getElementById('startDate').value = new Date().toISOString().slice(0,10);
+		document.getElementById('modal').style.display = 'flex';
+	}
+	function openEditModal(id) {
+		const dep = deposits.find(d => d.id === id);
+		if (!dep) return;
+		editingId = id;
+		document.getElementById('modalTitle').innerText = '编辑存款';
+		document.getElementById('bankName').value = dep.bank;
+		document.getElementById('amount').value = dep.amount;
+		document.getElementById('termYears').value = dep.termYears;
+		document.getElementById('rate').value = dep.rate;
+		document.getElementById('startDate').value = dep.startDate;
+		document.getElementById('modal').style.display = 'flex';
+	}
+	function saveDeposit() {
+		const bank = document.getElementById('bankName').value.trim();
+		const amount = parseFloat(document.getElementById('amount').value);
+		const termYears = parseInt(document.getElementById('termYears').value);
+		const rate = parseFloat(document.getElementById('rate').value);
+		const startDate = document.getElementById('startDate').value;
+		if (!bank || isNaN(amount) || isNaN(rate) || !startDate) { alert('请填写完整'); return; }
+		if (editingId === null) {
+			deposits.push({ id: nextId++, bank, amount, termYears, rate, startDate });
+		} else {
+			const idx = deposits.findIndex(d => d.id === editingId);
+			if (idx !== -1) deposits[idx] = { ...deposits[idx], bank, amount, termYears, rate, startDate };
+		}
+		saveToLocal();
+		document.getElementById('modal').style.display = 'none';
+		refreshAll();
+	}
+	function openYuebaoModal() {
+		document.getElementById('yuebaoAmountInput').value = yuebao.amount;
+		document.getElementById('yuebaoRateInput').value = yuebao.rate7d;
+		document.getElementById('yuebaoModal').style.display = 'flex';
+	}
+	function saveYuebao() {
+		const amount = parseFloat(document.getElementById('yuebaoAmountInput').value);
+		const rate = parseFloat(document.getElementById('yuebaoRateInput').value);
+		if (!isNaN(amount)) yuebao.amount = amount;
+		if (!isNaN(rate)) yuebao.rate7d = rate;
+		
+		const currentMonthLabel = getCurrentMonthLabel();
+		if (!yuebaoManualFlags[currentMonthLabel]) {
+			const monthlyIncome = yuebao.amount * (yuebao.rate7d / 100) / 12;
+			yuebaoManualData[currentMonthLabel] = monthlyIncome;
+		}
+		
+		saveToLocal();
+		document.getElementById('yuebaoModal').style.display = 'none';
+		refreshAll();
+	}
+
+	// ========== 备份恢复 ==========
+	function backupData() {
+		const allData = { deposits, yuebao, nextId, yuebaoManualData, yuebaoManualFlags, bankManualData, bankManualFlags };
+		const blob = new Blob([JSON.stringify(allData)], {type: 'application/json'});
+		const a = document.createElement('a');
+		a.href = URL.createObjectURL(blob);
+		a.download = `存款备份_${new Date().toISOString().slice(0,10)}.json`;
+		a.click();
+	}
+	function restoreData() {
+		const input = document.createElement('input');
+		input.type = 'file';
+		input.accept = '.json';
+		input.onchange = (e) => {
+			const file = e.target.files[0];
+			if (!file) return;
+			const reader = new FileReader();
+			reader.onload = (ev) => {
+				try {
+					const data = JSON.parse(ev.target.result);
+					deposits = data.deposits || [];
+					yuebao = data.yuebao || { amount: 0, rate7d: 0 };
+					nextId = data.nextId || 1;
+					yuebaoManualData = data.yuebaoManualData || {};
+					yuebaoManualFlags = data.yuebaoManualFlags || {};
+					bankManualData = data.bankManualData || {};
+					bankManualFlags = data.bankManualFlags || {};
+					saveToLocal();
+					refreshAll();
+					alert('恢复成功');
+				} catch { alert('无效文件'); }
+			};
+			reader.readAsText(file);
+		};
+		input.click();
+	}
+
+	// ========== 窗口滑动 ==========
+	function syncToCurrentDate() {
+		const now = new Date();
+		ybBaseMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+		bankBaseYear = now.getFullYear() - 9;
+	}
+	function moveYbMonth(offset) { 
+		ybBaseMonth.setMonth(ybBaseMonth.getMonth() + offset); 
+		updateAllStats();
+		renderYuebaoChart();
+		renderDepositList();
+	}
+	function moveBankYear(offset) { 
+		bankBaseYear += offset; 
+		updateAllStats();
+		renderBankChart();
+		renderDepositList();
+	}
+
+	function refreshAll() {
+		updateAllStats();
+		renderYuebaoChart();
+		renderBankChart();
+		renderDepositList();
+	}
+
+	// ========== 初始化 ==========
+	function init() {
+		loadFromLocal();
+		syncToCurrentDate();
+		refreshAll();
+
+		document.getElementById('openAddBtn').onclick = openAddModal;
+		document.getElementById('saveBtn').onclick = saveDeposit;
+		document.getElementById('cancelBtn').onclick = () => document.getElementById('modal').style.display = 'none';
+		document.getElementById('modal').onclick = (e) => { if (e.target === document.getElementById('modal')) document.getElementById('modal').style.display = 'none'; };
+		document.getElementById('editYuebaoBtn').onclick = openYuebaoModal;
+		document.getElementById('saveYuebaoBtn').onclick = saveYuebao;
+		document.getElementById('cancelYuebaoBtn').onclick = () => document.getElementById('yuebaoModal').style.display = 'none';
+		document.getElementById('yuebaoModal').onclick = (e) => { if (e.target === document.getElementById('yuebaoModal')) document.getElementById('yuebaoModal').style.display = 'none'; };
+		document.getElementById('chartTooltip').onclick = showEditModal;
+		document.getElementById('chartTooltip').onmouseenter = () => { if (tooltipTimeout) clearTimeout(tooltipTimeout); };
+		document.getElementById('chartTooltip').onmouseleave = hideTooltip;
+		document.getElementById('saveEditValueBtn').onclick = saveEditValue;
+		document.getElementById('cancelEditValueBtn').onclick = () => document.getElementById('editValueModal').style.display = 'none';
+		document.getElementById('editValueModal').onclick = (e) => { if (e.target === document.getElementById('editValueModal')) document.getElementById('editValueModal').style.display = 'none'; };
+		document.getElementById('backupBtn').onclick = backupData;
+		document.getElementById('restoreBtn').onclick = restoreData;
+		document.getElementById('ybPrevMonth').onclick = () => moveYbMonth(-1);
+		document.getElementById('ybNextMonth').onclick = () => moveYbMonth(1);
+		document.getElementById('bankPrevYear').onclick = () => moveBankYear(-1);
+		document.getElementById('bankNextYear').onclick = () => moveBankYear(1);
+		document.getElementById('bankActiveCount').onclick = () => { currentView = 'active'; renderDepositList(); scrollToList(); };
+		document.getElementById('bankExpiredCount').onclick = () => { currentView = 'expired'; renderDepositList(); scrollToList(); };
+	}
+
+	init();
+})();
+</script>
+</body>
+</html>
