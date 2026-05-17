@@ -85,10 +85,8 @@
 		
 		.card{background:#fff;border-radius:22px;padding:18px;border:1px solid #e8e8e8;box-shadow:0 6px 14px rgba(0,0,0,0.08);position:relative;overflow:hidden}
 		
-		/* 已到期卡片样式：蒙层 + 超大浅色水印在最上面 */
 		.card.expired{position:relative;background:#fff;border:none;overflow:hidden}
 		.card.expired::before{content:'';position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(160,160,160,0.35);pointer-events:none;z-index:10;border-radius:22px}
-		/* 超大浅色水印 - 居中大号，-25度，z-index最高 */
 		.card.expired::after{
 			content:'已到期';
 			position:absolute;
@@ -106,7 +104,6 @@
 			text-align:center;
 			font-family:system-ui,'Segoe UI',sans-serif;
 		}
-		/* 所有文字变暗 */
 		.card.expired .bank-name,
 		.card.expired .info-line span,
 		.card.expired .countdown-area,
@@ -116,11 +113,9 @@
 		.card.expired .delete-btn,
 		.card.expired .renew-btn,
 		.card.expired .bank-name-wrapper .bank-name{color:#6a6a6a !important}
-		/* 金额、利率、进度条、标签统一用进度条的颜色（暗色版本）*/
 		.card.expired .money-value{color:#5a7a4a !important}
 		.card.expired .interest-value{color:#8a6a3a !important}
 		.card.expired .progress-fill{background-color:#8a8a8a !important}
-		/* 已到期卡片内的2次存单标签颜色跟进度条百分比颜色一样 */
 		.card.expired .renew-badge{background:#8a8a8a !important;color:#fff !important}
 		.card.expired .countdown-area{background:#e0e0e0 !important}
 		.card.expired .progress-percent-badge{background:#8a8a8a !important;color:#fff !important}
@@ -128,7 +123,6 @@
 		.card.expired .progress-fill::after{display:none !important}
 		.card.expired .card-actions button{background:#e0e0e0 !important;color:#888 !important}
 		
-		/* 转存标签样式 - 正常卡片（未到期）保持进度条绿色 */
 		.renew-badge{
 			display:inline-block;
 			background:#6b8c5c;
@@ -361,7 +355,7 @@
   </div>
   <div class="time-control"><button class="time-btn" id="ybPrevMonth">◀ 上月</button><span class="chart-range" id="ybRangeLabel"></span><button class="time-btn" id="ybNextMonth">下月 ▶</button></div>
   <div class="tiny-chart"><canvas id="yuebaoChart"></canvas></div>
-  <div class="yuebao-tip">📌 建议每月：支付宝 → 余额宝 → 查看<strong>"七日年化"</strong>填写到上方。<br>⚠️ 若利率持续低于<strong>0.8%</strong>建议更换<strong>同业存单基金</strong>。<br>⏰ 最佳更换时间：<strong>周一至周四15:00前</strong>（仅损失1天）否则最高损失<strong>4天</strong>。</div>
+  <div class="yuebao-tip">📌 建议每月更新：支付宝 → 余额宝 → 查看<strong>"七日年化"</strong>填写到上方。<br>⚠️ 若利率持续低于<strong>0.8%</strong>建议更换<strong>更高收益产品</strong>。<br>⏰ 最佳更换时间：<strong>周一至周四15:00前</strong>（仅损失1天）否则最高损失<strong>4天</strong>。</div>
  </div>
  <div class="bank-card">
   <div class="bank-header"><span class="bank-title">🏦 银行定期 · 总览</span><span style="font-size:0.6rem;color:#aaa;">10年收益回顾</span></div>
@@ -435,9 +429,21 @@
 	let alertTimeout = null;
 
 	const YUEBAO_MAX = 300;
-	const BANK_MAX = 10000;
+	const BANK_MAX = 20000;
 	const YB_COLOR = '#e68a2e';
 	const BANK_COLOR = '#6b8c5c';
+
+	// 数值映射到等距位置 (0-6)
+	function mapValueToPosition(value) {
+		if (value <= 0) return 0;
+		if (value >= 20000) return 6;
+		if (value <= 2000) return (value / 2000) * 1;
+		if (value <= 4000) return 1 + ((value - 2000) / 2000);
+		if (value <= 6000) return 2 + ((value - 4000) / 2000);
+		if (value <= 8000) return 3 + ((value - 6000) / 2000);
+		if (value <= 10000) return 4 + ((value - 8000) / 2000);
+		return 5 + ((value - 10000) / 10000);
+	}
 
 	function getLocalDate() {
 		let today = new Date();
@@ -510,7 +516,13 @@
 	function addYears(dateStr, years) { let d = new Date(dateStr); d.setFullYear(d.getFullYear() + years); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 	function calcInterest(amount, rate, years) { return amount * (rate / 100) * years; }
 	function getDaysLeft(endDateStr) { const today = new Date(); today.setHours(0,0,0,0); const end = new Date(endDateStr); end.setHours(0,0,0,0); return Math.ceil((end - today) / (1000*60*60*24)); }
-	function formatMoney(v) { return '¥' + Math.round(v).toLocaleString(); }
+	function formatMoney(v) {
+		if (v === undefined || v === null) return '¥0';
+		if (Math.floor(v) === v) {
+			return '¥' + Math.floor(v).toLocaleString();
+		}
+		return '¥' + v.toFixed(2);
+	}
 	function enrich() { return deposits.map(d => { const end = addYears(d.startDate, d.termYears); const days = getDaysLeft(end); const expired = days < 0; const interest = calcInterest(d.amount, d.rate, d.termYears); return { ...d, endDate: end, daysLeft: days, expired, interest }; }); }
 
 	function getProgressPercent(startDateStr, endDateStr) {
@@ -527,13 +539,89 @@
 	function getCurrentMonthIndex() { let labels=getYuebaoLabels(), now=new Date(); for(let i=0;i<labels.length;i++){ let match=labels[i].match(/(\d+)年(\d+)月/); if(match&&parseInt(match[1])===now.getFullYear()&&parseInt(match[2])===now.getMonth()+1) return i; } return -1; }
 	function getActualMonthIncome(yearMonthLabel) { if(yuebaoManualData[yearMonthLabel]!==undefined) return yuebaoManualData[yearMonthLabel]; return yuebao.amount*(yuebao.rate7d/100)/12; }
 	function getActualYearInterest(yearLabel) { if(bankManualData[yearLabel]!==undefined) return bankManualData[yearLabel]; return enrich().filter(d=>new Date(d.endDate).getFullYear()===parseInt(yearLabel)).reduce((s,d)=>s+d.interest,0); }
-	function getYuebaoDataWithLogic() { let labels=getYuebaoLabels(), now=new Date(); return labels.map(label=>{ let match=label.match(/(\d+)年(\d+)月/); if(!match) return null; let date=new Date(parseInt(match[1]),parseInt(match[2])-1,1); if(date>new Date(now.getFullYear(),now.getMonth(),1)) return null; let val=yuebaoManualData[label]; return (val!==undefined)?val:0; }); }
-	function getYuebaoYearlyTotal() { let total=0; for(let m=1;m<=12;m++){ total+=yuebaoManualData[`${new Date().getFullYear()}年${m}月`]||0; } return total; }
+	
+	function getYuebaoDataWithLogic() { 
+		let labels=getYuebaoLabels(), now=new Date(); 
+		let estimatedMonthly = yuebao.amount * (yuebao.rate7d / 100) / 12;
+		return labels.map(label=>{ 
+			let match=label.match(/(\d+)年(\d+)月/); 
+			if(!match) return null; 
+			let date=new Date(parseInt(match[1]),parseInt(match[2])-1,1); 
+			if(date>new Date(now.getFullYear(),now.getMonth(),1)) return null; 
+			let val=yuebaoManualData[label]; 
+			if(val !== undefined) return val;
+			return estimatedMonthly;
+		}); 
+	}
+	
+	// 获取最早有数据的年份
+	function getYuebaoStartYear() {
+		let currentYear = new Date().getFullYear();
+		let allMonths = Object.keys(yuebaoManualData);
+		if (allMonths.length === 0) return currentYear;
+		
+		let startYear = currentYear;
+		for (let label of allMonths) {
+			let match = label.match(/(\d+)年/);
+			if (match) {
+				let year = parseInt(match[1]);
+				if (year < startYear) startYear = year;
+			}
+		}
+		return startYear;
+	}
+	
+	// 今年总收益 - 只计算当前年份1月到当前月
+	function getYuebaoYearlyTotal() { 
+		let total = 0;
+		let now = new Date();
+		let currentYear = now.getFullYear();
+		let currentMonth = now.getMonth() + 1;
+		let estimatedMonthly = yuebao.amount * (yuebao.rate7d / 100) / 12;
+		
+		for(let m = 1; m <= currentMonth; m++){ 
+			let label = `${currentYear}年${m}月`;
+			let manual = yuebaoManualData[label];
+			total += (manual !== undefined) ? manual : estimatedMonthly;
+		}
+		return total;
+	}
+	
+	// 累计收益 - 从最早数据月份累加到当前月
+	function getYuebaoTotalIncome() {
+		let total = 0;
+		let now = new Date();
+		let currentYear = now.getFullYear();
+		let currentMonth = now.getMonth() + 1;
+		let startYear = getYuebaoStartYear();
+		let estimatedMonthly = yuebao.amount * (yuebao.rate7d / 100) / 12;
+		
+		for (let year = startYear; year <= currentYear; year++) {
+			let maxMonth = (year === currentYear) ? currentMonth : 12;
+			for (let m = 1; m <= maxMonth; m++) {
+				let label = `${year}年${m}月`;
+				let manual = yuebaoManualData[label];
+				total += (manual !== undefined) ? manual : estimatedMonthly;
+			}
+		}
+		return total;
+	}
+	
 	function getBankLabels() { let labels=[]; for(let i=0;i<10;i++) labels.push(`${bankBaseYear+i}年`); return labels; }
 	function getCurrentYearIndex() { let labels=getBankLabels(), cy=new Date().getFullYear(); for(let i=0;i<labels.length;i++) if(parseInt(labels[i])===cy) return i; return -1; }
 	function getMaturedInterest() { return enrich().filter(d=>d.expired).reduce((s,d)=>s+d.interest,0); }
 	function getCurrentYearDueInterest() { let cy=new Date().getFullYear(); return enrich().filter(d=>new Date(d.endDate).getFullYear()===cy).reduce((s,d)=>s+d.interest,0); }
-	function getBankYearlyInterestWithLogic() { let enriched=enrich(), labels=getBankLabels(), cy=new Date().getFullYear(); return labels.map(label=>{ let year=parseInt(label); if(year>cy) return null; if(bankManualFlags[label]) return bankManualData[label]||0; return enriched.filter(d=>new Date(d.endDate).getFullYear()===year).reduce((s,d)=>s+d.interest,0); }); }
+	function getBankYearlyInterestWithLogic() { 
+		let enriched=enrich(), labels=getBankLabels(), cy=new Date().getFullYear(); 
+		return labels.map(label=>{ 
+			let year=parseInt(label); 
+			if(year>cy) return null; 
+			let value;
+			if(bankManualFlags[label]) value = bankManualData[label]||0;
+			else value = enriched.filter(d=>new Date(d.endDate).getFullYear()===year).reduce((s,d)=>s+d.interest,0);
+			return mapValueToPosition(value);
+		}); 
+	}
 
 	function updateAllStats() {
 		const enriched = enrich();
@@ -557,7 +645,7 @@
 		document.getElementById('ybDaily').innerText = '¥' + (daily || 0).toFixed(2);
 		document.getElementById('ybMonthly').innerText = '¥' + (monthly || 0).toFixed(2);
 		document.getElementById('ybYearly').innerText = formatMoney(getYuebaoYearlyTotal());
-		document.getElementById('ybTotal').innerText = formatMoney(Object.values(yuebaoManualData).reduce((s, v) => s + v, 0));
+		document.getElementById('ybTotal').innerText = formatMoney(getYuebaoTotalIncome());
 
 		const now = new Date();
 		const currentMonthLabel = `${now.getFullYear()}年${now.getMonth()+1}月`;
@@ -668,7 +756,8 @@
 	}
 
 	function renderBankChart() {
-		const labels = getBankLabels(), data = getBankYearlyInterestWithLogic();
+		const labels = getBankLabels();
+		const data = getBankYearlyInterestWithLogic();
 		const ctx = document.getElementById('bankChart').getContext('2d');
 		const currentYearIndex = getCurrentYearIndex();
 		const hasCurrentRecord = currentYearIndex !== -1 && data[currentYearIndex] !== null && data[currentYearIndex] !== undefined;
@@ -698,9 +787,51 @@
 				plugins: { legend: { display: false }, tooltip: { enabled: false } },
 				scales: {
 					x: { grid: { display: false }, ticks: { font: { size: 7 }, color: '#aaa', maxRotation: 0 } },
-					y: { display: true, grid: { color: '#f0f0f0' }, min: 0, max: BANK_MAX, ticks: { callback: (val) => [0,2000,4000,6000,8000,10000].includes(val) ? (val>=1000?'¥'+(val/1000)+'K':'¥'+val) : null, font: { size: 7 }, color: '#aaa', maxTicksLimit: 6, autoSkip: false } }
+					y: { 
+						display: true, 
+						grid: { color: '#f0f0f0' }, 
+						min: 0, 
+						max: 6,
+						ticks: { 
+							stepSize: 1,
+							callback: (val) => {
+								if (val === 0) return '0';
+								if (val === 1) return '2K';
+								if (val === 2) return '4K';
+								if (val === 3) return '6K';
+								if (val === 4) return '8K';
+								if (val === 5) return '1W';
+								if (val === 6) return '2W';
+								return '';
+							},
+							font: { size: 7 }, 
+							color: '#aaa',
+							autoSkip: false
+						}
+					}
 				},
-				onClick: (e, elements) => { if (elements.length) { const idx = elements[0].index; const val = data[idx]; if (val !== null) { showTooltip(e, labels[idx], val, 'bank'); } } }
+				onClick: (e, elements) => { 
+					if (elements.length) { 
+						const idx = elements[0].index; 
+						const val = data[idx]; 
+						if (val !== null) { 
+							let realValue = 0;
+							if (val === 1) realValue = 2000;
+							else if (val === 2) realValue = 4000;
+							else if (val === 3) realValue = 6000;
+							else if (val === 4) realValue = 8000;
+							else if (val === 5) realValue = 10000;
+							else if (val === 6) realValue = 20000;
+							else if (val > 0 && val < 1) realValue = val * 2000;
+							else if (val > 1 && val < 2) realValue = 2000 + (val - 1) * 2000;
+							else if (val > 2 && val < 3) realValue = 4000 + (val - 2) * 2000;
+							else if (val > 3 && val < 4) realValue = 6000 + (val - 3) * 2000;
+							else if (val > 4 && val < 5) realValue = 8000 + (val - 4) * 2000;
+							else if (val > 5 && val < 6) realValue = 10000 + (val - 5) * 10000;
+							showTooltip(e, labels[idx], realValue, 'bank'); 
+						} 
+					} 
+				}
 			}
 		});
 		
@@ -822,7 +953,11 @@
 			
 			let actionButtons = `<div class="card-actions"><button class="edit-btn" data-id="${d.id}">✏️ 编辑</button><button class="delete-btn" data-id="${d.id}">🗑️ 删除</button>`;
 			if (d.expired) {
-				actionButtons += `<button class="renew-btn" data-id="${d.id}">🔄 转存</button>`;
+				if (d.hasRenewed) {
+					actionButtons += `<button class="renew-btn" data-id="${d.id}">✅ 已转存</button>`;
+				} else {
+					actionButtons += `<button class="renew-btn" data-id="${d.id}">🔄 转存</button>`;
+				}
 			}
 			actionButtons += `</div>`;
 			
@@ -842,9 +977,15 @@
 				showCustomAlertPlain('删除成功');
 			});
 		}));
-		document.querySelectorAll('.renew-btn').forEach(btn => btn.addEventListener('click', () => {
+		document.querySelectorAll('.renew-btn').forEach(btn => btn.addEventListener('click', (e) => {
+			e.stopPropagation();
 			const id = parseInt(btn.dataset.id);
-			openRenewModal(id);
+			const deposit = deposits.find(d => d.id === id);
+			if (deposit && deposit.hasRenewed) {
+				showCustomAlertPlain('该笔存单已转存');
+			} else {
+				openRenewModal(id);
+			}
 		}));
 	}
 	
@@ -870,13 +1011,18 @@
 		if (isNaN(amount) || isNaN(rate) || !startDate) { showCustomAlertPlain('请填写完整'); return; }
 		
 		let renewCount = 2;
+		let sourceBank = '';
 		if (renewSourceId) {
 			const sourceDeposit = deposits.find(d => d.id === renewSourceId);
-			if (sourceDeposit && sourceDeposit.renewCount) {
-				renewCount = sourceDeposit.renewCount + 1;
+			if (sourceDeposit) {
+				if (sourceDeposit.renewCount) {
+					renewCount = sourceDeposit.renewCount + 1;
+				}
+				sourceBank = sourceDeposit.bank;
+				// 标记原存单已转存
+				sourceDeposit.hasRenewed = true;
 			}
 		}
-		const sourceBank = deposits.find(d => d.id === renewSourceId)?.bank || '';
 		if (!sourceBank) { showCustomAlertPlain('来源存单异常'); return; }
 		
 		deposits.push({ id: nextId++, bank: sourceBank, amount, termYears, rate, startDate, renewCount });
