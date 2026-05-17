@@ -85,10 +85,8 @@
 		
 		.card{background:#fff;border-radius:22px;padding:18px;border:1px solid #e8e8e8;box-shadow:0 6px 14px rgba(0,0,0,0.08);position:relative;overflow:hidden}
 		
-		/* 已到期卡片样式：蒙层 + 超大浅色水印在最上面 */
 		.card.expired{position:relative;background:#fff;border:none;overflow:hidden}
 		.card.expired::before{content:'';position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(160,160,160,0.35);pointer-events:none;z-index:10;border-radius:22px}
-		/* 超大浅色水印 - 居中大号，-25度，z-index最高 */
 		.card.expired::after{
 			content:'已到期';
 			position:absolute;
@@ -97,7 +95,7 @@
 			transform:translate(-50%,-50%) rotate(-25deg);
 			font-size:6.4rem;
 			font-weight:900;
-			color:rgba(100,100,100,0.22);
+			color:rgba(100,100,100,0.1);
 			white-space:nowrap;
 			letter-spacing:8px;
 			pointer-events:none;
@@ -106,7 +104,6 @@
 			text-align:center;
 			font-family:system-ui,'Segoe UI',sans-serif;
 		}
-		/* 所有文字变暗 */
 		.card.expired .bank-name,
 		.card.expired .info-line span,
 		.card.expired .countdown-area,
@@ -116,11 +113,9 @@
 		.card.expired .delete-btn,
 		.card.expired .renew-btn,
 		.card.expired .bank-name-wrapper .bank-name{color:#6a6a6a !important}
-		/* 金额、利率、进度条、标签统一用进度条的颜色（暗色版本）*/
 		.card.expired .money-value{color:#5a7a4a !important}
 		.card.expired .interest-value{color:#8a6a3a !important}
 		.card.expired .progress-fill{background-color:#8a8a8a !important}
-		/* 已到期卡片内的2次存单标签颜色跟进度条百分比颜色一样 */
 		.card.expired .renew-badge{background:#8a8a8a !important;color:#fff !important}
 		.card.expired .countdown-area{background:#e0e0e0 !important}
 		.card.expired .progress-percent-badge{background:#8a8a8a !important;color:#fff !important}
@@ -128,7 +123,6 @@
 		.card.expired .progress-fill::after{display:none !important}
 		.card.expired .card-actions button{background:#e0e0e0 !important;color:#888 !important}
 		
-		/* 转存标签样式 - 正常卡片（未到期）保持进度条绿色 */
 		.renew-badge{
 			display:inline-block;
 			background:#6b8c5c;
@@ -361,7 +355,7 @@
   </div>
   <div class="time-control"><button class="time-btn" id="ybPrevMonth">◀ 上月</button><span class="chart-range" id="ybRangeLabel"></span><button class="time-btn" id="ybNextMonth">下月 ▶</button></div>
   <div class="tiny-chart"><canvas id="yuebaoChart"></canvas></div>
-  <div class="yuebao-tip">📌 建议每月：支付宝 → 余额宝 → 查看<strong>"七日年化"</strong>填写到上方。<br>⚠️ 若利率持续低于<strong>0.8%</strong>建议更换<strong>同业存单基金</strong>。<br>⏰ 最佳更换时间：<strong>周一至周四15:00前</strong>（仅损失1天）否则最高损失<strong>4天</strong>。</div>
+  <div class="yuebao-tip">📌 建议每月更新：支付宝 → 余额宝 → 查看<strong>"七日年化"</strong>填写到上方。<br>⚠️ 若利率持续低于<strong>0.8%</strong>建议更换<strong>更高收益产品</strong>。<br>⏰ 最佳更换时间：<strong>周一至周四15:00前</strong>（仅损失1天）否则最高损失<strong>4天</strong>。</div>
  </div>
  <div class="bank-card">
   <div class="bank-header"><span class="bank-title">🏦 银行定期 · 总览</span><span style="font-size:0.6rem;color:#aaa;">10年收益回顾</span></div>
@@ -378,7 +372,7 @@
   </div>
   <div class="time-control"><button class="time-btn" id="bankPrevYear">◀ 上年</button><span class="chart-range" id="bankRangeLabel"></span><button class="time-btn" id="bankNextYear">下年 ▶</button></div>
   <div class="tiny-chart"><canvas id="bankChart"></canvas></div>
-  <div class="bank-tip">📌 定期存款到期前7天会预警提醒，建议及时关注。<br>💡 点击上方筛选按钮可查看未到期或已到期存单。<br>⚠️ 到期后及时转存，避免活期利率损失收益。</div>
+  <div class="bank-tip">📌 定期存款到期前7天会预警提醒，建议及时关注。<br>💡 点击下方筛选按钮可查看未到期或已到期存单。<br>⚠️ 到期后及时转存，避免活期利率损失收益。</div>
  </div>
  <button class="add-deposit-btn" id="openAddBtn">+ 添加存款</button>
  <div class="list-header">
@@ -439,6 +433,42 @@
 	const YB_COLOR = '#e68a2e';
 	const BANK_COLOR = '#6b8c5c';
 
+	// 缓存银行曲线数据，避免重复计算
+	let cachedBankData = null;
+	let cachedBankDataHash = null;
+
+	function getBankDataHash() {
+		// 计算存单数据的简单哈希
+		let str = JSON.stringify(deposits) + JSON.stringify(bankManualData) + JSON.stringify(bankManualFlags) + bankBaseYear;
+		let hash = 0;
+		for (let i = 0; i < str.length; i++) {
+			hash = ((hash << 5) - hash) + str.charCodeAt(i);
+			hash |= 0;
+		}
+		return hash;
+	}
+
+	function getBankYearlyInterestWithLogic() {
+		const currentHash = getBankDataHash();
+		if (cachedBankData !== null && cachedBankDataHash === currentHash) {
+			return cachedBankData;
+		}
+		
+		const enriched = enrich();
+		const labels = getBankLabels();
+		const cy = new Date().getFullYear();
+		const result = labels.map(label => {
+			const year = parseInt(label);
+			if (year > cy) return null;
+			if (bankManualFlags[label]) return bankManualData[label] || 0;
+			return enriched.filter(d => new Date(d.endDate).getFullYear() === year).reduce((s, d) => s + d.interest, 0);
+		});
+		
+		cachedBankData = result;
+		cachedBankDataHash = currentHash;
+		return result;
+	}
+
 	function getLocalDate() {
 		let today = new Date();
 		return today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
@@ -494,6 +524,8 @@
 		localStorage.setItem('yuebaoManualFlags', JSON.stringify(yuebaoManualFlags));
 		localStorage.setItem('bankManualData', JSON.stringify(bankManualData));
 		localStorage.setItem('bankManualFlags', JSON.stringify(bankManualFlags));
+		// 数据变化，清除缓存
+		cachedBankData = null;
 	}
 
 	function loadFromLocal() {
@@ -505,12 +537,19 @@
 		yuebaoManualFlags = JSON.parse(localStorage.getItem('yuebaoManualFlags')) || {};
 		bankManualData = JSON.parse(localStorage.getItem('bankManualData')) || {};
 		bankManualFlags = JSON.parse(localStorage.getItem('bankManualFlags')) || {};
+		cachedBankData = null;
 	}
 
 	function addYears(dateStr, years) { let d = new Date(dateStr); d.setFullYear(d.getFullYear() + years); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 	function calcInterest(amount, rate, years) { return amount * (rate / 100) * years; }
 	function getDaysLeft(endDateStr) { const today = new Date(); today.setHours(0,0,0,0); const end = new Date(endDateStr); end.setHours(0,0,0,0); return Math.ceil((end - today) / (1000*60*60*24)); }
-	function formatMoney(v) { return '¥' + Math.round(v).toLocaleString(); }
+	function formatMoney(v) {
+		if (v === undefined || v === null) return '¥0';
+		if (Math.floor(v) === v) {
+			return '¥' + Math.floor(v).toLocaleString();
+		}
+		return '¥' + v.toFixed(2);
+	}
 	function enrich() { return deposits.map(d => { const end = addYears(d.startDate, d.termYears); const days = getDaysLeft(end); const expired = days < 0; const interest = calcInterest(d.amount, d.rate, d.termYears); return { ...d, endDate: end, daysLeft: days, expired, interest }; }); }
 
 	function getProgressPercent(startDateStr, endDateStr) {
@@ -527,13 +566,75 @@
 	function getCurrentMonthIndex() { let labels=getYuebaoLabels(), now=new Date(); for(let i=0;i<labels.length;i++){ let match=labels[i].match(/(\d+)年(\d+)月/); if(match&&parseInt(match[1])===now.getFullYear()&&parseInt(match[2])===now.getMonth()+1) return i; } return -1; }
 	function getActualMonthIncome(yearMonthLabel) { if(yuebaoManualData[yearMonthLabel]!==undefined) return yuebaoManualData[yearMonthLabel]; return yuebao.amount*(yuebao.rate7d/100)/12; }
 	function getActualYearInterest(yearLabel) { if(bankManualData[yearLabel]!==undefined) return bankManualData[yearLabel]; return enrich().filter(d=>new Date(d.endDate).getFullYear()===parseInt(yearLabel)).reduce((s,d)=>s+d.interest,0); }
-	function getYuebaoDataWithLogic() { let labels=getYuebaoLabels(), now=new Date(); return labels.map(label=>{ let match=label.match(/(\d+)年(\d+)月/); if(!match) return null; let date=new Date(parseInt(match[1]),parseInt(match[2])-1,1); if(date>new Date(now.getFullYear(),now.getMonth(),1)) return null; let val=yuebaoManualData[label]; return (val!==undefined)?val:0; }); }
-	function getYuebaoYearlyTotal() { let total=0; for(let m=1;m<=12;m++){ total+=yuebaoManualData[`${new Date().getFullYear()}年${m}月`]||0; } return total; }
+	
+	function getYuebaoDataWithLogic() { 
+		let labels=getYuebaoLabels(), now=new Date(); 
+		let estimatedMonthly = yuebao.amount * (yuebao.rate7d / 100) / 12;
+		return labels.map(label=>{ 
+			let match=label.match(/(\d+)年(\d+)月/); 
+			if(!match) return null; 
+			let date=new Date(parseInt(match[1]),parseInt(match[2])-1,1); 
+			if(date>new Date(now.getFullYear(),now.getMonth(),1)) return null; 
+			let val=yuebaoManualData[label]; 
+			if(val !== undefined) return val;
+			return estimatedMonthly;
+		}); 
+	}
+	
+	function getYuebaoStartYear() {
+		let currentYear = new Date().getFullYear();
+		let allMonths = Object.keys(yuebaoManualData);
+		if (allMonths.length === 0) return currentYear;
+		
+		let startYear = currentYear;
+		for (let label of allMonths) {
+			let match = label.match(/(\d+)年/);
+			if (match) {
+				let year = parseInt(match[1]);
+				if (year < startYear) startYear = year;
+			}
+		}
+		return startYear;
+	}
+	
+	function getYuebaoYearlyTotal() { 
+		let total = 0;
+		let now = new Date();
+		let currentYear = now.getFullYear();
+		let currentMonth = now.getMonth() + 1;
+		let estimatedMonthly = yuebao.amount * (yuebao.rate7d / 100) / 12;
+		
+		for(let m = 1; m <= currentMonth; m++){ 
+			let label = `${currentYear}年${m}月`;
+			let manual = yuebaoManualData[label];
+			total += (manual !== undefined) ? manual : estimatedMonthly;
+		}
+		return total;
+	}
+	
+	function getYuebaoTotalIncome() {
+		let total = 0;
+		let now = new Date();
+		let currentYear = now.getFullYear();
+		let currentMonth = now.getMonth() + 1;
+		let startYear = getYuebaoStartYear();
+		let estimatedMonthly = yuebao.amount * (yuebao.rate7d / 100) / 12;
+		
+		for (let year = startYear; year <= currentYear; year++) {
+			let maxMonth = (year === currentYear) ? currentMonth : 12;
+			for (let m = 1; m <= maxMonth; m++) {
+				let label = `${year}年${m}月`;
+				let manual = yuebaoManualData[label];
+				total += (manual !== undefined) ? manual : estimatedMonthly;
+			}
+		}
+		return total;
+	}
+	
 	function getBankLabels() { let labels=[]; for(let i=0;i<10;i++) labels.push(`${bankBaseYear+i}年`); return labels; }
 	function getCurrentYearIndex() { let labels=getBankLabels(), cy=new Date().getFullYear(); for(let i=0;i<labels.length;i++) if(parseInt(labels[i])===cy) return i; return -1; }
 	function getMaturedInterest() { return enrich().filter(d=>d.expired).reduce((s,d)=>s+d.interest,0); }
 	function getCurrentYearDueInterest() { let cy=new Date().getFullYear(); return enrich().filter(d=>new Date(d.endDate).getFullYear()===cy).reduce((s,d)=>s+d.interest,0); }
-	function getBankYearlyInterestWithLogic() { let enriched=enrich(), labels=getBankLabels(), cy=new Date().getFullYear(); return labels.map(label=>{ let year=parseInt(label); if(year>cy) return null; if(bankManualFlags[label]) return bankManualData[label]||0; return enriched.filter(d=>new Date(d.endDate).getFullYear()===year).reduce((s,d)=>s+d.interest,0); }); }
 
 	function updateAllStats() {
 		const enriched = enrich();
@@ -557,7 +658,7 @@
 		document.getElementById('ybDaily').innerText = '¥' + (daily || 0).toFixed(2);
 		document.getElementById('ybMonthly').innerText = '¥' + (monthly || 0).toFixed(2);
 		document.getElementById('ybYearly').innerText = formatMoney(getYuebaoYearlyTotal());
-		document.getElementById('ybTotal').innerText = formatMoney(Object.values(yuebaoManualData).reduce((s, v) => s + v, 0));
+		document.getElementById('ybTotal').innerText = formatMoney(getYuebaoTotalIncome());
 
 		const now = new Date();
 		const currentMonthLabel = `${now.getFullYear()}年${now.getMonth()+1}月`;
@@ -668,7 +769,8 @@
 	}
 
 	function renderBankChart() {
-		const labels = getBankLabels(), data = getBankYearlyInterestWithLogic();
+		const labels = getBankLabels();
+		const data = getBankYearlyInterestWithLogic();
 		const ctx = document.getElementById('bankChart').getContext('2d');
 		const currentYearIndex = getCurrentYearIndex();
 		const hasCurrentRecord = currentYearIndex !== -1 && data[currentYearIndex] !== null && data[currentYearIndex] !== undefined;
@@ -822,7 +924,11 @@
 			
 			let actionButtons = `<div class="card-actions"><button class="edit-btn" data-id="${d.id}">✏️ 编辑</button><button class="delete-btn" data-id="${d.id}">🗑️ 删除</button>`;
 			if (d.expired) {
-				actionButtons += `<button class="renew-btn" data-id="${d.id}">🔄 转存</button>`;
+				if (d.hasRenewed) {
+					actionButtons += `<button class="renew-btn" data-id="${d.id}">✅ 已转存</button>`;
+				} else {
+					actionButtons += `<button class="renew-btn" data-id="${d.id}">🔄 转存</button>`;
+				}
 			}
 			actionButtons += `</div>`;
 			
@@ -842,9 +948,15 @@
 				showCustomAlertPlain('删除成功');
 			});
 		}));
-		document.querySelectorAll('.renew-btn').forEach(btn => btn.addEventListener('click', () => {
+		document.querySelectorAll('.renew-btn').forEach(btn => btn.addEventListener('click', (e) => {
+			e.stopPropagation();
 			const id = parseInt(btn.dataset.id);
-			openRenewModal(id);
+			const deposit = deposits.find(d => d.id === id);
+			if (deposit && deposit.hasRenewed) {
+				showCustomAlertPlain('该笔存单已转存');
+			} else {
+				openRenewModal(id);
+			}
 		}));
 	}
 	
@@ -870,13 +982,17 @@
 		if (isNaN(amount) || isNaN(rate) || !startDate) { showCustomAlertPlain('请填写完整'); return; }
 		
 		let renewCount = 2;
+		let sourceBank = '';
 		if (renewSourceId) {
 			const sourceDeposit = deposits.find(d => d.id === renewSourceId);
-			if (sourceDeposit && sourceDeposit.renewCount) {
-				renewCount = sourceDeposit.renewCount + 1;
+			if (sourceDeposit) {
+				if (sourceDeposit.renewCount) {
+					renewCount = sourceDeposit.renewCount + 1;
+				}
+				sourceBank = sourceDeposit.bank;
+				sourceDeposit.hasRenewed = true;
 			}
 		}
-		const sourceBank = deposits.find(d => d.id === renewSourceId)?.bank || '';
 		if (!sourceBank) { showCustomAlertPlain('来源存单异常'); return; }
 		
 		deposits.push({ id: nextId++, bank: sourceBank, amount, termYears, rate, startDate, renewCount });
@@ -1008,6 +1124,7 @@
 		const now = new Date();
 		ybBaseMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 		bankBaseYear = now.getFullYear() - 8;
+		cachedBankData = null;
 	}
 	
 	function moveYbMonth(offset) { 
@@ -1019,6 +1136,7 @@
 	
 	function moveBankYear(offset) { 
 		bankBaseYear += offset; 
+		cachedBankData = null;
 		updateAllStats(); 
 		renderBankChart(); 
 		renderDepositList(); 
