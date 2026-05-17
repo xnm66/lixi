@@ -59,7 +59,7 @@
 		.time-control{display:flex;align-items:center;justify-content:space-between;margin:8px 0 4px}
 		.time-btn{background:#f0f0f0;border:none;border-radius:12px;padding:3px 12px;font-size:0.65rem;cursor:pointer;color:#888}
 		.chart-range{font-size:0.6rem;color:#aaa}
-		.tiny-chart{height:100px;width:100%;margin-top:4px}
+		.tiny-chart{height:120px;width:100%;margin-top:4px}
 		.tiny-chart canvas{cursor:pointer;-webkit-tap-highlight-color:transparent}
 		.yuebao-tip{background:#fef5e8;border-radius:12px;padding:8px 12px;font-size:0.55rem;color:#b89a6a;margin-top:12px;line-height:1.5}
 
@@ -385,7 +385,11 @@
  <div class="card-list" id="cardContainer"></div>
  <div class="footer">
   <span class="footer-text">💾 数据仅保存在手机本地，不上传不泄露</span>
-  <div class="footer-buttons"><button class="footer-btn" id="backupBtn">📁 备份</button><button class="footer-btn" id="restoreBtn">🔄 恢复</button></div>
+  <div class="footer-buttons">
+   <button class="footer-btn" id="backupBtn">📁 备份</button>
+   <button class="footer-btn" id="restoreBtn">🔄 恢复</button>
+   <button class="footer-btn" id="exportExcelBtn">📎 导出CSV</button>
+  </div>
  </div>
 </div>
 <div id="chartTooltip" class="chart-tooltip"></div>
@@ -429,44 +433,29 @@
 	let alertTimeout = null;
 
 	const YUEBAO_MAX = 300;
-	const BANK_MAX = 10000;
+	const BANK_MAX = 20000;
 	const YB_COLOR = '#e68a2e';
 	const BANK_COLOR = '#6b8c5c';
 
-	// 缓存银行曲线数据，避免重复计算
+	// 性能优化：缓存银行曲线数据
 	let cachedBankData = null;
-	let cachedBankDataHash = null;
-
-	function getBankDataHash() {
-		// 计算存单数据的简单哈希
-		let str = JSON.stringify(deposits) + JSON.stringify(bankManualData) + JSON.stringify(bankManualFlags) + bankBaseYear;
-		let hash = 0;
-		for (let i = 0; i < str.length; i++) {
-			hash = ((hash << 5) - hash) + str.charCodeAt(i);
-			hash |= 0;
-		}
-		return hash;
+	let cachedDepositsHash = '';
+	
+	// 计算存单数据的哈希值，用于判断是否需要重新计算
+	function getDepositsHash() {
+		return JSON.stringify(deposits.map(d => d.id + d.amount + d.rate + d.startDate + d.termYears + (d.hasRenewed ? 1 : 0)));
 	}
-
-	function getBankYearlyInterestWithLogic() {
-		const currentHash = getBankDataHash();
-		if (cachedBankData !== null && cachedBankDataHash === currentHash) {
-			return cachedBankData;
+	
+	// 优化后的数值映射函数 - 使用数学公式代替多个if判断
+	function mapValueToPosition(value) {
+		if (value <= 0) return 0;
+		if (value >= 20000) return 6;
+		// 分段线性映射：0-2000 -> 0-1, 2000-4000 -> 1-2, 4000-6000 -> 2-3, 6000-8000 -> 3-4, 8000-10000 -> 4-5, 10000-20000 -> 5-6
+		if (value <= 10000) {
+			return value / 2000;
+		} else {
+			return 5 + (value - 10000) / 10000;
 		}
-		
-		const enriched = enrich();
-		const labels = getBankLabels();
-		const cy = new Date().getFullYear();
-		const result = labels.map(label => {
-			const year = parseInt(label);
-			if (year > cy) return null;
-			if (bankManualFlags[label]) return bankManualData[label] || 0;
-			return enriched.filter(d => new Date(d.endDate).getFullYear() === year).reduce((s, d) => s + d.interest, 0);
-		});
-		
-		cachedBankData = result;
-		cachedBankDataHash = currentHash;
-		return result;
 	}
 
 	function getLocalDate() {
@@ -524,7 +513,7 @@
 		localStorage.setItem('yuebaoManualFlags', JSON.stringify(yuebaoManualFlags));
 		localStorage.setItem('bankManualData', JSON.stringify(bankManualData));
 		localStorage.setItem('bankManualFlags', JSON.stringify(bankManualFlags));
-		// 数据变化，清除缓存
+		// 数据变化后清除缓存
 		cachedBankData = null;
 	}
 
@@ -635,6 +624,29 @@
 	function getCurrentYearIndex() { let labels=getBankLabels(), cy=new Date().getFullYear(); for(let i=0;i<labels.length;i++) if(parseInt(labels[i])===cy) return i; return -1; }
 	function getMaturedInterest() { return enrich().filter(d=>d.expired).reduce((s,d)=>s+d.interest,0); }
 	function getCurrentYearDueInterest() { let cy=new Date().getFullYear(); return enrich().filter(d=>new Date(d.endDate).getFullYear()===cy).reduce((s,d)=>s+d.interest,0); }
+	
+	// 优化后的银行曲线数据获取 - 使用缓存
+	function getBankYearlyInterestWithLogic() { 
+		const currentHash = getDepositsHash();
+		if (cachedBankData !== null && cachedBankData.hash === currentHash) {
+			return cachedBankData.data;
+		}
+		
+		let enriched = enrich();
+		let labels = getBankLabels();
+		let cy = new Date().getFullYear();
+		let result = labels.map(label=>{ 
+			let year=parseInt(label); 
+			if(year>cy) return null; 
+			let value;
+			if(bankManualFlags[label]) value = bankManualData[label]||0;
+			else value = enriched.filter(d=>new Date(d.endDate).getFullYear()===year).reduce((s,d)=>s+d.interest,0);
+			return mapValueToPosition(value);
+		});
+		
+		cachedBankData = { hash: currentHash, data: result };
+		return result;
+	}
 
 	function updateAllStats() {
 		const enriched = enrich();
@@ -800,9 +812,51 @@
 				plugins: { legend: { display: false }, tooltip: { enabled: false } },
 				scales: {
 					x: { grid: { display: false }, ticks: { font: { size: 7 }, color: '#aaa', maxRotation: 0 } },
-					y: { display: true, grid: { color: '#f0f0f0' }, min: 0, max: BANK_MAX, ticks: { callback: (val) => [0,2000,4000,6000,8000,10000].includes(val) ? (val>=1000?'¥'+(val/1000)+'K':'¥'+val) : null, font: { size: 7 }, color: '#aaa', maxTicksLimit: 6, autoSkip: false } }
+					y: { 
+						display: true, 
+						grid: { color: '#f0f0f0' }, 
+						min: 0, 
+						max: 6,
+						ticks: { 
+							stepSize: 1,
+							callback: (val) => {
+								if (val === 0) return '0';
+								if (val === 1) return '2K';
+								if (val === 2) return '4K';
+								if (val === 3) return '6K';
+								if (val === 4) return '8K';
+								if (val === 5) return '1W';
+								if (val === 6) return '2W';
+								return '';
+							},
+							font: { size: 7 }, 
+							color: '#aaa',
+							autoSkip: false
+						}
+					}
 				},
-				onClick: (e, elements) => { if (elements.length) { const idx = elements[0].index; const val = data[idx]; if (val !== null) { showTooltip(e, labels[idx], val, 'bank'); } } }
+				onClick: (e, elements) => { 
+					if (elements.length) { 
+						const idx = elements[0].index; 
+						const val = data[idx]; 
+						if (val !== null) { 
+							let realValue = 0;
+							if (val === 1) realValue = 2000;
+							else if (val === 2) realValue = 4000;
+							else if (val === 3) realValue = 6000;
+							else if (val === 4) realValue = 8000;
+							else if (val === 5) realValue = 10000;
+							else if (val === 6) realValue = 20000;
+							else if (val > 0 && val < 1) realValue = val * 2000;
+							else if (val > 1 && val < 2) realValue = 2000 + (val - 1) * 2000;
+							else if (val > 2 && val < 3) realValue = 4000 + (val - 2) * 2000;
+							else if (val > 3 && val < 4) realValue = 6000 + (val - 3) * 2000;
+							else if (val > 4 && val < 5) realValue = 8000 + (val - 4) * 2000;
+							else if (val > 5 && val < 6) realValue = 10000 + (val - 5) * 10000;
+							showTooltip(e, labels[idx], realValue, 'bank'); 
+						} 
+					} 
+				}
 			}
 		});
 		
@@ -1120,11 +1174,95 @@
 		input.click(); 
 	}
 	
+	// 导出CSV功能
+	function exportToCSV() {
+		const enriched = enrich();
+		if (enriched.length === 0) {
+			showCustomAlertPlain('暂无存单数据可导出');
+			return;
+		}
+		
+		const groups = {};
+		enriched.forEach(d => {
+			const year = new Date(d.startDate).getFullYear();
+			if (!groups[year]) groups[year] = [];
+			groups[year].push(d);
+		});
+		
+		const years = Object.keys(groups).sort();
+		let csvRows = [];
+		
+		csvRows.push(['存单管理']);
+		csvRows.push([]);
+		csvRows.push(['周期', '存款期限', '金额', '利率', '存款日期', '到期日期', '利息', '本息', '是否已完成']);
+		
+		let totalAmountAll = 0, totalInterestAll = 0, totalTotalAll = 0;
+		
+		for (let year of years) {
+			const depositsInYear = groups[year];
+			depositsInYear.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+			csvRows.push([`${year}年`]);
+			
+			let yearAmount = 0, yearInterest = 0, yearTotal = 0;
+			for (let d of depositsInYear) {
+				yearAmount += d.amount;
+				yearInterest += d.interest;
+				yearTotal += d.amount + d.interest;
+			}
+			
+			for (let d of depositsInYear) {
+				const startYearMonth = `${new Date(d.startDate).getFullYear()}年${new Date(d.startDate).getMonth() + 1}月`;
+				const endYearMonth = `${new Date(d.endDate).getFullYear()}年${new Date(d.endDate).getMonth() + 1}月`;
+				const period = `${startYearMonth} → ${endYearMonth}`;
+				const term = `${d.termYears}年`;
+				const amount = d.amount;
+				const rate = d.rate.toFixed(2) + '%';
+				const startDateFull = d.startDate;
+				const endDateFull = d.endDate;
+				const interest = d.interest;
+				const total = amount + interest;
+				const status = d.expired ? '✅已完成' : `剩余${d.daysLeft}天`;
+				
+				csvRows.push([period, term, amount, rate, startDateFull, endDateFull, interest, total, status]);
+			}
+			
+			csvRows.push([`${year}年合计`, '', yearAmount, '', '', '', yearInterest, yearTotal, '']);
+			totalAmountAll += yearAmount;
+			totalInterestAll += yearInterest;
+			totalTotalAll += yearTotal;
+		}
+		
+		csvRows.push([]);
+		csvRows.push(['总计', '', totalAmountAll, '', '', '', totalInterestAll, totalTotalAll, '']);
+		
+		const csvContent = csvRows.map(row => 
+			row.map(cell => {
+				if (cell === undefined || cell === null) return '';
+				const cellStr = String(cell);
+				if (cellStr.includes(',') || cellStr.includes('"')) {
+					return `"${cellStr.replace(/"/g, '""')}"`;
+				}
+				return cellStr;
+			}).join(',')
+		).join('\n');
+		
+		const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+		const link = document.createElement('a');
+		const url = URL.createObjectURL(blob);
+		link.href = url;
+		link.download = `存单管理_${getLocalDate()}.csv`;
+		document.body.appendChild(link);
+		link.click();
+		document.body.removeChild(link);
+		URL.revokeObjectURL(url);
+		
+		showCustomAlertPlain('导出成功');
+	}
+	
 	function syncToCurrentDate() { 
 		const now = new Date();
 		ybBaseMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 		bankBaseYear = now.getFullYear() - 8;
-		cachedBankData = null;
 	}
 	
 	function moveYbMonth(offset) { 
@@ -1136,7 +1274,6 @@
 	
 	function moveBankYear(offset) { 
 		bankBaseYear += offset; 
-		cachedBankData = null;
 		updateAllStats(); 
 		renderBankChart(); 
 		renderDepositList(); 
@@ -1185,6 +1322,7 @@
 		document.getElementById('editValueModal').onclick = (e) => { if (e.target === document.getElementById('editValueModal')) document.getElementById('editValueModal').style.display = 'none'; };
 		document.getElementById('backupBtn').onclick = backupData;
 		document.getElementById('restoreBtn').onclick = restoreData;
+		document.getElementById('exportExcelBtn').onclick = exportToCSV;
 		document.getElementById('ybPrevMonth').onclick = () => moveYbMonth(-1);
 		document.getElementById('ybNextMonth').onclick = () => moveYbMonth(1);
 		document.getElementById('bankPrevYear').onclick = () => moveBankYear(-1);
