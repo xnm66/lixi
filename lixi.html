@@ -59,7 +59,7 @@
 		.time-control{display:flex;align-items:center;justify-content:space-between;margin:8px 0 4px}
 		.time-btn{background:#f0f0f0;border:none;border-radius:12px;padding:3px 12px;font-size:0.65rem;cursor:pointer;color:#888}
 		.chart-range{font-size:0.6rem;color:#aaa}
-		.tiny-chart{height:120px;width:100%;margin-top:4px}
+		.tiny-chart{height:100px;width:100%;margin-top:4px}
 		.tiny-chart canvas{cursor:pointer;-webkit-tap-highlight-color:transparent}
 		.yuebao-tip{background:#fef5e8;border-radius:12px;padding:8px 12px;font-size:0.55rem;color:#b89a6a;margin-top:12px;line-height:1.5}
 
@@ -385,11 +385,7 @@
  <div class="card-list" id="cardContainer"></div>
  <div class="footer">
   <span class="footer-text">💾 数据仅保存在手机本地，不上传不泄露</span>
-  <div class="footer-buttons">
-   <button class="footer-btn" id="backupBtn">📁 备份</button>
-   <button class="footer-btn" id="restoreBtn">🔄 恢复</button>
-   <button class="footer-btn" id="exportExcelBtn">📎 导出CSV</button>
-  </div>
+  <div class="footer-buttons"><button class="footer-btn" id="backupBtn">📁 备份</button><button class="footer-btn" id="restoreBtn">🔄 恢复</button></div>
  </div>
 </div>
 <div id="chartTooltip" class="chart-tooltip"></div>
@@ -437,25 +433,16 @@
 	const YB_COLOR = '#e68a2e';
 	const BANK_COLOR = '#6b8c5c';
 
-	// 性能优化：缓存银行曲线数据
-	let cachedBankData = null;
-	let cachedDepositsHash = '';
-	
-	// 计算存单数据的哈希值，用于判断是否需要重新计算
-	function getDepositsHash() {
-		return JSON.stringify(deposits.map(d => d.id + d.amount + d.rate + d.startDate + d.termYears + (d.hasRenewed ? 1 : 0)));
-	}
-	
-	// 优化后的数值映射函数 - 使用数学公式代替多个if判断
+	// 数值映射到等距位置 (0-6)
 	function mapValueToPosition(value) {
 		if (value <= 0) return 0;
 		if (value >= 20000) return 6;
-		// 分段线性映射：0-2000 -> 0-1, 2000-4000 -> 1-2, 4000-6000 -> 2-3, 6000-8000 -> 3-4, 8000-10000 -> 4-5, 10000-20000 -> 5-6
-		if (value <= 10000) {
-			return value / 2000;
-		} else {
-			return 5 + (value - 10000) / 10000;
-		}
+		if (value <= 2000) return (value / 2000) * 1;
+		if (value <= 4000) return 1 + ((value - 2000) / 2000);
+		if (value <= 6000) return 2 + ((value - 4000) / 2000);
+		if (value <= 8000) return 3 + ((value - 6000) / 2000);
+		if (value <= 10000) return 4 + ((value - 8000) / 2000);
+		return 5 + ((value - 10000) / 10000);
 	}
 
 	function getLocalDate() {
@@ -513,8 +500,6 @@
 		localStorage.setItem('yuebaoManualFlags', JSON.stringify(yuebaoManualFlags));
 		localStorage.setItem('bankManualData', JSON.stringify(bankManualData));
 		localStorage.setItem('bankManualFlags', JSON.stringify(bankManualFlags));
-		// 数据变化后清除缓存
-		cachedBankData = null;
 	}
 
 	function loadFromLocal() {
@@ -526,7 +511,6 @@
 		yuebaoManualFlags = JSON.parse(localStorage.getItem('yuebaoManualFlags')) || {};
 		bankManualData = JSON.parse(localStorage.getItem('bankManualData')) || {};
 		bankManualFlags = JSON.parse(localStorage.getItem('bankManualFlags')) || {};
-		cachedBankData = null;
 	}
 
 	function addYears(dateStr, years) { let d = new Date(dateStr); d.setFullYear(d.getFullYear() + years); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
@@ -570,6 +554,7 @@
 		}); 
 	}
 	
+	// 获取最早有数据的年份
 	function getYuebaoStartYear() {
 		let currentYear = new Date().getFullYear();
 		let allMonths = Object.keys(yuebaoManualData);
@@ -586,6 +571,7 @@
 		return startYear;
 	}
 	
+	// 今年总收益 - 只计算当前年份1月到当前月
 	function getYuebaoYearlyTotal() { 
 		let total = 0;
 		let now = new Date();
@@ -601,6 +587,7 @@
 		return total;
 	}
 	
+	// 累计收益 - 从最早数据月份累加到当前月
 	function getYuebaoTotalIncome() {
 		let total = 0;
 		let now = new Date();
@@ -624,28 +611,16 @@
 	function getCurrentYearIndex() { let labels=getBankLabels(), cy=new Date().getFullYear(); for(let i=0;i<labels.length;i++) if(parseInt(labels[i])===cy) return i; return -1; }
 	function getMaturedInterest() { return enrich().filter(d=>d.expired).reduce((s,d)=>s+d.interest,0); }
 	function getCurrentYearDueInterest() { let cy=new Date().getFullYear(); return enrich().filter(d=>new Date(d.endDate).getFullYear()===cy).reduce((s,d)=>s+d.interest,0); }
-	
-	// 优化后的银行曲线数据获取 - 使用缓存
 	function getBankYearlyInterestWithLogic() { 
-		const currentHash = getDepositsHash();
-		if (cachedBankData !== null && cachedBankData.hash === currentHash) {
-			return cachedBankData.data;
-		}
-		
-		let enriched = enrich();
-		let labels = getBankLabels();
-		let cy = new Date().getFullYear();
-		let result = labels.map(label=>{ 
+		let enriched=enrich(), labels=getBankLabels(), cy=new Date().getFullYear(); 
+		return labels.map(label=>{ 
 			let year=parseInt(label); 
 			if(year>cy) return null; 
 			let value;
 			if(bankManualFlags[label]) value = bankManualData[label]||0;
 			else value = enriched.filter(d=>new Date(d.endDate).getFullYear()===year).reduce((s,d)=>s+d.interest,0);
 			return mapValueToPosition(value);
-		});
-		
-		cachedBankData = { hash: currentHash, data: result };
-		return result;
+		}); 
 	}
 
 	function updateAllStats() {
@@ -1044,6 +1019,7 @@
 					renewCount = sourceDeposit.renewCount + 1;
 				}
 				sourceBank = sourceDeposit.bank;
+				// 标记原存单已转存
 				sourceDeposit.hasRenewed = true;
 			}
 		}
@@ -1174,91 +1150,6 @@
 		input.click(); 
 	}
 	
-	// 导出CSV功能
-	function exportToCSV() {
-		const enriched = enrich();
-		if (enriched.length === 0) {
-			showCustomAlertPlain('暂无存单数据可导出');
-			return;
-		}
-		
-		const groups = {};
-		enriched.forEach(d => {
-			const year = new Date(d.startDate).getFullYear();
-			if (!groups[year]) groups[year] = [];
-			groups[year].push(d);
-		});
-		
-		const years = Object.keys(groups).sort();
-		let csvRows = [];
-		
-		csvRows.push(['存单管理']);
-		csvRows.push([]);
-		csvRows.push(['周期', '存款期限', '金额', '利率', '存款日期', '到期日期', '利息', '本息', '是否已完成']);
-		
-		let totalAmountAll = 0, totalInterestAll = 0, totalTotalAll = 0;
-		
-		for (let year of years) {
-			const depositsInYear = groups[year];
-			depositsInYear.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
-			csvRows.push([`${year}年`]);
-			
-			let yearAmount = 0, yearInterest = 0, yearTotal = 0;
-			for (let d of depositsInYear) {
-				yearAmount += d.amount;
-				yearInterest += d.interest;
-				yearTotal += d.amount + d.interest;
-			}
-			
-			for (let d of depositsInYear) {
-				const startYearMonth = `${new Date(d.startDate).getFullYear()}年${new Date(d.startDate).getMonth() + 1}月`;
-				const endYearMonth = `${new Date(d.endDate).getFullYear()}年${new Date(d.endDate).getMonth() + 1}月`;
-				const period = `${startYearMonth} → ${endYearMonth}`;
-				const term = `${d.termYears}年`;
-				const amount = d.amount;
-				const rate = d.rate.toFixed(2) + '%';
-				const startDateFull = d.startDate;
-				const endDateFull = d.endDate;
-				const interest = d.interest;
-				const total = amount + interest;
-				const status = d.expired ? '✅已完成' : `剩余${d.daysLeft}天`;
-				
-				csvRows.push([period, term, amount, rate, startDateFull, endDateFull, interest, total, status]);
-			}
-			
-			csvRows.push([`${year}年合计`, '', yearAmount, '', '', '', yearInterest, yearTotal, '']);
-			totalAmountAll += yearAmount;
-			totalInterestAll += yearInterest;
-			totalTotalAll += yearTotal;
-		}
-		
-		csvRows.push([]);
-		csvRows.push(['总计', '', totalAmountAll, '', '', '', totalInterestAll, totalTotalAll, '']);
-		
-		const csvContent = csvRows.map(row => 
-			row.map(cell => {
-				if (cell === undefined || cell === null) return '';
-				const cellStr = String(cell);
-				if (cellStr.includes(',') || cellStr.includes('"')) {
-					return `"${cellStr.replace(/"/g, '""')}"`;
-				}
-				return cellStr;
-			}).join(',')
-		).join('\n');
-		
-		const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-		const link = document.createElement('a');
-		const url = URL.createObjectURL(blob);
-		link.href = url;
-		link.download = `存单管理_${getLocalDate()}.csv`;
-		document.body.appendChild(link);
-		link.click();
-		document.body.removeChild(link);
-		URL.revokeObjectURL(url);
-		
-		showCustomAlertPlain('导出成功');
-	}
-	
 	function syncToCurrentDate() { 
 		const now = new Date();
 		ybBaseMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -1322,7 +1213,6 @@
 		document.getElementById('editValueModal').onclick = (e) => { if (e.target === document.getElementById('editValueModal')) document.getElementById('editValueModal').style.display = 'none'; };
 		document.getElementById('backupBtn').onclick = backupData;
 		document.getElementById('restoreBtn').onclick = restoreData;
-		document.getElementById('exportExcelBtn').onclick = exportToCSV;
 		document.getElementById('ybPrevMonth').onclick = () => moveYbMonth(-1);
 		document.getElementById('ybNextMonth').onclick = () => moveYbMonth(1);
 		document.getElementById('bankPrevYear').onclick = () => moveBankYear(-1);
